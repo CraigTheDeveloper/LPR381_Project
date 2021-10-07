@@ -45,6 +45,7 @@
     <Compile Include="CustomException.cs" />
     <Compile Include="DecisionVariable.cs" />
     <Compile Include="InequalitySign.cs" />
+    <Compile Include="InfeasibleException.cs" />
     <Compile Include="Model.cs" />
     <Compile Include="ObjectiveFunction.cs" />
     <Compile Include="ProblemType.cs" />
