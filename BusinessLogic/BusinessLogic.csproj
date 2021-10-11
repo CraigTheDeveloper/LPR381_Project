@@ -47,6 +47,9 @@
     <Compile Include="Algorithms\DualSimplex.cs" />
     <Compile Include="Algorithms\PrimalSimplex.cs" />
     <Compile Include="Algorithms\TwoPhaseSimplex.cs" />
+    <Compile Include="BinaryTree.cs" />
+    <Compile Include="BinaryTreeNode.cs" />
+    <Compile Include="ListCloner.cs" />
     <Compile Include="ModelSolver.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

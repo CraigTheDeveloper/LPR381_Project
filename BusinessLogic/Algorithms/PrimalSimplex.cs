@@ -114,7 +114,7 @@ namespace BusinessLogic.Algorithms
             int pivotRow = GetPivotRow(model, pivotColumn);
 
             if (pivotRow == -1)
-                throw new CustomException("There is no suitable row to pivot on - the problem is infeasible");
+                throw new InfeasibleException("There is no suitable row to pivot on - the problem is infeasible");
 
             Pivot(model, pivotRow, pivotColumn);
 

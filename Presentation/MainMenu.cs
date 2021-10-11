@@ -38,6 +38,15 @@ namespace Presentation
                 Console.ReadKey();
                 Run();
             }
+            catch (InfeasibleException ex)
+            {
+                Console.WriteLine($"There was an error. Details: {ex.Message}.");
+                Console.WriteLine("\nHere are the tables that were calculated before we ran into that error:");
+                SolvedModelPrinter.Print(model);
+                Console.WriteLine("\n\nPress any key to continue. . .");
+                Console.ReadKey();
+                Run();
+            }
             catch (Exception ex)
             {
                 Console.WriteLine($"There was an error. Details: {ex.Message}.");

@@ -120,7 +120,7 @@ namespace BusinessLogic.Algorithms
             int pivotColumn = GetPivotColumn(model, pivotRow);
 
             if (pivotColumn == -1)
-                throw new CustomException("There is no suitable column to pivot on - the problem is infeasible");
+                throw new InfeasibleException("There is no suitable column to pivot on - the problem is infeasible");
 
             Pivot(model, pivotRow, pivotColumn);
 

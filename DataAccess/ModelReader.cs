@@ -117,7 +117,6 @@ namespace DataAccess
 
                 string[] signRestrictions = lines[lines.Count - 1].Split(' ');
 
-                int index = 0;
                 foreach (var restriction in signRestrictions)
                 {
                     switch (restriction.ToLower())
@@ -152,7 +151,6 @@ namespace DataAccess
                                 throw new CustomException("Invalid sign restriction found");
                             }
                     }
-                    index++;
                 }
             }
             catch (FormatException)
