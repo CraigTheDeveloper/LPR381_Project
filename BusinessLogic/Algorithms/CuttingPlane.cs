@@ -57,16 +57,28 @@ namespace BusinessLogic.Algorithms
         public override void Solve(Model model)
         {
             totalDicisionVariables = model.ObjectiveFunction.DecisionVariables.Count();
-            List<List<double>> previousTable = new List<List<double>>(model.Result[model.Result.Count - 1]);
 
+            // Looping until we have an optimal solution
+            bool isOptimal = false;
+			while (!isOptimal)
+			{
+                List<List<double>> previousTable = new List<List<double>>(model.Result[model.Result.Count - 1]);
+                int targetRow = GetTargetRow(model, previousTable);// 0 if no row
 
+				// No target row means we can no longer iterate
+				if (targetRow > 0)
+				{
+                    List<List<double>> newTable = AddNewRow(previousTable, previousTable[targetRow]);
+                    model.Result.Add(newTable);
 
-            int targetRow = GetTargetRow(model, previousTable);// 0 if no row
-            List<List<double>> newTable = AddNewRow(previousTable, previousTable[targetRow]);
-            model.Result.Add(newTable);
-
-            DualSimplex test = new DualSimplex();
-            test.Iterate(model);
+                    DualSimplex dualSimplex = new DualSimplex();
+                    dualSimplex.Iterate(model);
+				}
+				else
+				{
+                    isOptimal = true;
+				}
+            }
         }
 
         // Finding which constraint must be targetted first/next
@@ -100,7 +112,7 @@ namespace BusinessLogic.Algorithms
 
             // If the first two ratios(when sorted) are the same, it means there are multiple RHS values
             // equally close to 0,5
-            if (sortedRatios[0] == sortedRatios[1])
+            if (sortedRatios.Count > 1 && sortedRatios[0] == sortedRatios[1])
 			{
                 targetRow = FindLeftMostX(previousTable, remainderRatios, sortedRatios);
 			}
@@ -110,10 +122,17 @@ namespace BusinessLogic.Algorithms
                 {
                     if (remainderRatios[i] == sortedRatios[0])
                     {
-                        targetRow = intConstraints[i+1];
+                        targetRow = intConstraints[i];
                     }
                 }
             }
+
+            // If the first ratio is 0.5, then it means remainder was 0. Thus
+            // all targetted rows are integers.
+			if (sortedRatios[0] == 0.5)
+			{
+                return 0;
+			}
 
             return targetRow; // 0 is returned if no row is found
         }
@@ -151,7 +170,7 @@ namespace BusinessLogic.Algorithms
             List<double> newRow = new List<double>();
             int newColumnLocation = targetRow.Count - 1;
 
-            // Getting remainders of the target constraints
+            // Getting remainders of the target constraint
             for (int i = 0; i < targetRow.Count; i++)
 			{
 				if (i == newColumnLocation)
@@ -176,13 +195,11 @@ namespace BusinessLogic.Algorithms
             return newTable;
 		}
 
+
         /*
-         *  TO DO:
-         *  Choose a row -COMPLETE!
-         *  Get rounding new row, add to new table -99%
-         *  Looping Algorithm - INCOMPLETE
-         * 
-         * Change Methods to only require Model instead of both model and table
+         * DO TO:
+         * Test Partial-Integer Problems
+         * Eliminate table parameter needs via model replacement
          */
     }
 }
