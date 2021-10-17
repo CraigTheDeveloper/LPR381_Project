@@ -142,6 +142,7 @@ namespace BusinessLogic.Algorithms
                     }
                 }
             }
+            model.Result.Add(newTable);
         }
 
         private void Pivot(Model model, int pivotRow, int pivotColumn)
@@ -274,14 +275,14 @@ namespace BusinessLogic.Algorithms
 
         private void Iterate(Model model)
         {
-            // Check if optimal - if not, iterate
-            if (IsOptimal(model))
-                return;
 
             // Get the pivot column first
             int pivotColumn = GetPivotColumn(model);
             // Then get the pivot row
             int pivotRow = GetPivotRow(model, pivotColumn);
+            // Check if optimal - if not, iterate
+            if (IsOptimal(model))
+                return;
 
             if (pivotRow == -1)
                 throw new InfeasibleException("There is no suitable row to pivot on - the problem is infeasible");
