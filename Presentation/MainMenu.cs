@@ -23,7 +23,7 @@ namespace Presentation
                 Console.WriteLine("Welcome to the solver");
                 Console.WriteLine("=========================================================================================================");
                 Console.WriteLine("To get started, choose a premade text file that contains the model you would like to solve:");
-                Console.WriteLine("\nlimpopo.txt\nsanta.txt\nkorean.txt\nfarmer.txt\nbranch.txt\ncut.txt\n");
+                Console.WriteLine("\nlimpopo.txt\nsanta.txt\nkorean.txt\nfarmer.txt\n");
                 string modelPath = Console.ReadLine();
                 Console.WriteLine("=========================================================================================================");
                 model = ModelReader.ReadModelFromFile(modelPath);

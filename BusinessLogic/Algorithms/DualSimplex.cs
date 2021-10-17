@@ -108,7 +108,7 @@ namespace BusinessLogic.Algorithms
             primalSimplex.Solve(model);
         }
 
-        private void Iterate(Model model)
+        public void Iterate(Model model)
         {
             // Check if we can pivot
             if (!CanPivot(model))
