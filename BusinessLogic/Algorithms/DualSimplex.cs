@@ -136,6 +136,9 @@ namespace BusinessLogic.Algorithms
 
             for (int i = 1; i < table.Count; i++)
             {
+                // Sometimes when the RHS should be 0 it is actually a miniscule amount smaller or bigger than 0 -  which can result in us trying to
+                // pivot on a row where the RHS is actually 0 (which we obviously should not do, hence when checking if a RHS is negative to pivot on
+                // that row, we allow a really tiny margin below 0 that will also "count as 0" instead of negative)
                 if (table[i][table[i].Count - 1] < -0.000000000001)
                 {
                     canPivot = true;

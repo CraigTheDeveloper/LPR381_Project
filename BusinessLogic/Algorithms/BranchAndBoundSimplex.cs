@@ -59,7 +59,7 @@ namespace BusinessLogic.Algorithms
 
         private void Solve(BinaryTreeNode root)
         {
-            var model = new Model() { Result = root.Data };
+            var model = new Model() { ProblemType = this.model.ProblemType, Result = root.Data };
             dualSimplex.Solve(model);
         }
 
