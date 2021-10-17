@@ -23,7 +23,7 @@ namespace BusinessLogic.Algorithms
                 initialTable[0].Add(decVar.Coefficient * -1);
             }
 
-            // We need to add a slack/excess variable for each constraint so we add extra columns with 0s
+            // We need to add a slack/excess & artificial variables so we add extra columns with 0s
             // If we have any = constraints then we need to split those into 2 <= and >= constraints
             for (int i = 0; i < model.Constraints.Count; i++)
             {
@@ -72,7 +72,7 @@ namespace BusinessLogic.Algorithms
                     }
                 }
 
-                // Add relevant 0s and 1s for our slack and excess variables
+                // Add relevant 0s and 1s for our slack, excess and artificial variables
                 for (int j = 0; j < model.Constraints.Count; j++)
                 {
                     if (j == i)
@@ -121,9 +121,27 @@ namespace BusinessLogic.Algorithms
             return canPivot;
         }
 
-        private void WElim(Model model, int wRow, int excessCols)
+        private void wElim(Model model, int wRow, int excessCols)
         {
+            var previousTable = model.Result[model.Result.Count - 1];
+            var newTable = new List<List<double>>();
 
+            if (model.Constraints[wRow].RightHandSide > 0)
+            {
+                throw new InfeasibleException("There is no feasible solution.");
+            }
+            else
+            {
+                for (int i = wRow; i < previousTable.Count; wRow++)
+                {
+                    newTable.Add(new List<double>());
+
+                    for (int j = 0; j < previousTable[i].Count; j++)
+                    {
+                        newTable[i].Add(previousTable[i][j]);
+                    }
+                }
+            }
         }
 
         private void Pivot(Model model, int pivotRow, int pivotColumn)
