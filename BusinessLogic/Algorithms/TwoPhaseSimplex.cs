@@ -12,11 +12,10 @@ namespace BusinessLogic.Algorithms
     {
         public override void PutModelInCanonicalForm(Model model)
         {
-            
-
             // Our initial table
             List<List<double>> initialTable = new List<List<double>>();
 
+            // Add the objective function coefficients to the initial table first (and take the decision variables across the = sign: make them negative)
             initialTable.Add(new List<double>());
 
             foreach (var decVar in model.ObjectiveFunction.DecisionVariables)
@@ -24,10 +23,36 @@ namespace BusinessLogic.Algorithms
                 initialTable[0].Add(decVar.Coefficient * -1);
             }
 
-            // Add columns with 0s for the slack variables and RHS
-            for (int i = 0; i <= model.Constraints.Count; i++)
+            // We need to add a slack/excess variable for each constraint so we add extra columns with 0s
+            // If we have any = constraints then we need to split those into 2 <= and >= constraints
+            for (int i = 0; i < model.Constraints.Count; i++)
             {
                 initialTable[0].Add(0);
+                if (model.Constraints[i].InequalitySign == InequalitySign.EqualTo)
+                    initialTable[0].Add(0);
+            }
+
+            // Finally, add a 0 for the RHS of the objective function
+            initialTable[0].Add(0);
+
+            // Firstly, make rhs non negative
+            var nonNegativeConstraints = model.Constraints.Where(c => c.InequalitySign == InequalitySign.EqualTo).ToList();
+            if (nonNegativeConstraints?.Count() > 0)
+            {
+                for (int i = 0; i < nonNegativeConstraints.Count(); i++)
+                {
+                    model.Constraints[model.Constraints.FindIndex(c => c == nonNegativeConstraints[i])].InequalitySign = InequalitySign.LessThanOrEqualTo;
+                    var newConstraint = new Constraint();
+                    newConstraint.InequalitySign = InequalitySign.GreaterThanOrEqualTo;
+                    newConstraint.RightHandSide = nonNegativeConstraints[i].RightHandSide;
+
+                    foreach (var decVar in nonNegativeConstraints[i].DecisionVariables)
+                    {
+                        newConstraint.DecisionVariables.Add(new DecisionVariable() { Coefficient = decVar.Coefficient });
+                    }
+
+                    model.Constraints.Add(newConstraint);
+                }
             }
 
             for (int i = 0; i < model.Constraints.Count; i++)
@@ -37,10 +62,17 @@ namespace BusinessLogic.Algorithms
                 // Add the technical coefficients of the decision variables to the constraints
                 foreach (var decVar in model.Constraints[i].DecisionVariables)
                 {
-                    constraintValues.Add(decVar.Coefficient);
+                    if (model.Constraints[i].InequalitySign == InequalitySign.LessThanOrEqualTo)
+                    {
+                        constraintValues.Add(decVar.Coefficient);
+                    }
+                    else
+                    {
+                        constraintValues.Add(decVar.Coefficient * -1);
+                    }
                 }
 
-                // Add relevant 0s and 1s for our slack variables
+                // Add relevant 0s and 1s for our slack and excess variables
                 for (int j = 0; j < model.Constraints.Count; j++)
                 {
                     if (j == i)
@@ -54,17 +86,42 @@ namespace BusinessLogic.Algorithms
                 }
 
                 // Add the RHS of our constraint
-                constraintValues.Add(model.Constraints[i].RightHandSide);
+                if (model.Constraints[i].InequalitySign == InequalitySign.LessThanOrEqualTo)
+                {
+                    constraintValues.Add(model.Constraints[i].RightHandSide);
+                }
+                else
+                {
+                    constraintValues.Add(model.Constraints[i].RightHandSide * -1);
+                }
 
                 initialTable.Add(constraintValues);
             }
 
-            // Add the initial table to the model's result, which will store the canonical form of the model for the algorithm
             model.Result.Add(initialTable);
 
         }
 
-        private void WElim(Model model, int wRow, int accessVarCols)
+        private bool CanPivot(Model model)
+        {
+            // If we have any negatives in the RHS then we can pivot (obviously if we also have a row to pivot on)
+            bool canPivot = false;
+
+            var table = model.Result[model.Result.Count - 1];
+
+            for (int i = 1; i < table.Count; i++)
+            {
+                if (table[i][table[i].Count - 1] < 0)
+                {
+                    canPivot = true;
+                    break;
+                }
+            }
+
+            return canPivot;
+        }
+
+        private void WElim(Model model, int wRow, int excessCols)
         {
 
         }
@@ -220,6 +277,8 @@ namespace BusinessLogic.Algorithms
         public override void Solve(Model model)
         {
             Iterate(model);
+            var primalSimplex = new PrimalSimplex();
+            primalSimplex.Solve(model);
         }
     }
 }
