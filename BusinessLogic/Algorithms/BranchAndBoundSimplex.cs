@@ -213,7 +213,7 @@ namespace BusinessLogic.Algorithms
                 {
                     double rhs = GetRhsOfVariable(intBinVar, table);
 
-                    if (rhs - Math.Truncate(rhs) == 0)
+                    if (rhs - Math.Truncate(rhs) < 0.00001)
                     {
                         indexesToDiscard.Add(intBinVar);
                     }

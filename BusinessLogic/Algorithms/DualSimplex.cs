@@ -130,13 +130,13 @@ namespace BusinessLogic.Algorithms
 
         private bool CanPivot(Model model)
         {
-            // If we have any negatives in the RHS then we can pivot (obviously if we also have a row to pivot on)
+            // If we have any negatives in the RHS then we can pivot (obviously if we also have a column to pivot on)
             bool canPivot = false;
             var table = model.Result[model.Result.Count - 1];
 
             for (int i = 1; i < table.Count; i++)
             {
-                if (table[i][table[i].Count - 1] < 0)
+                if (table[i][table[i].Count - 1] < -0.000000000001)
                 {
                     canPivot = true;
                     break;
