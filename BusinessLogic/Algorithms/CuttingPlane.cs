@@ -17,7 +17,9 @@ namespace BusinessLogic.Algorithms
 
 
         private List<int> intConstraints = new List<int>(); // Used to remember the 'int' constraints
+
         private int totalDicisionVariables = 0;
+
         public override void PutModelInCanonicalForm(Model model)
         {
             Algorithm chosenAlgo;
