@@ -12,196 +12,199 @@ namespace BusinessLogic.Algorithms
         // Cutting Plane relies on other algorithms to find a partially optimal solution, which
         // is then used to find a solution fitting integer requirements.
 
-        // As other algorithms don't take integer requirements into account, said requirements
-        // must be changed temporarily to a >= 0 rqeuirement, to ensure accurate results.
-
-
-        private List<int> intConstraints = new List<int>(); // Used to remember the 'int' constraints
-
-        private int totalDicisionVariables = 0;
+        private DualSimplex dualSimplex = new DualSimplex();
 
         public override void PutModelInCanonicalForm(Model model)
         {
-            Algorithm chosenAlgo;
-
-            // Changing integer restrictions into positive restrictions
-            for (int i = 0; i < model.SignRestrictions.Count(); i++)
-			{
-                if (model.SignRestrictions[i] == SignRestriction.Integer)
-                {
-                    intConstraints.Add(i);
-                    model.SignRestrictions[i] = SignRestriction.Positive;
-                }
-            }
-
-            // Choosing which algorithm will solve partially
-            if (model.ProblemType == ProblemType.Minimization)
-            {
-                chosenAlgo = new DualSimplex();
-            }
-            else
-            {
-                if (!(model.Constraints.Any(c => c.InequalitySign == InequalitySign.EqualTo) ||
-                    model.Constraints.Any(c => c.InequalitySign == InequalitySign.GreaterThanOrEqualTo)))
-                {
-                    chosenAlgo = new PrimalSimplex();
-                }
-                else
-                {
-                    chosenAlgo = new DualSimplex();
-                }
-            }
-
-            chosenAlgo.PutModelInCanonicalForm(model);
-            chosenAlgo.Solve(model);
+            dualSimplex.PutModelInCanonicalForm(model);
+            // Solve the relaxed LP
+            dualSimplex.Solve(model);
         }
 
         public override void Solve(Model model)
         {
-            totalDicisionVariables = model.ObjectiveFunction.DecisionVariables.Count();
-
-            // Looping until we have an optimal solution
-            bool isOptimal = false;
-			while (!isOptimal)
-			{
-                List<List<double>> previousTable = new List<List<double>>(model.Result[model.Result.Count - 1]);
-                int targetRow = GetTargetRow(model, previousTable);// 0 if no row
-
-				// No target row means we can no longer iterate
-				if (targetRow > 0)
-				{
-                    List<List<double>> newTable = AddNewRow(previousTable, previousTable[targetRow]);
-                    model.Result.Add(newTable);
-
-                    DualSimplex dualSimplex = new DualSimplex();
-                    dualSimplex.Iterate(model);
-				}
-				else
-				{
-                    isOptimal = true;
-				}
+            while (CanCut(model).Count > 0)
+            {       
+                Cut(model);
+                dualSimplex.Solve(model);
             }
         }
 
-        // Finding which constraint must be targetted first/next
-        private int GetTargetRow(Model model, List<List<double>> previousTable)
+        private void Cut(Model model)
         {
-            int targetRow = 0;
-            List<double> remainders = new List<double>();
-            List<double> remainderRatios = new List<double>();
+            var table = model.Result[model.Result.Count - 1];
 
-			// Getting RHS remainders
-			for (int i = 1; i < previousTable.Count; i++)
-			{
-                // Only targetting rows with Int Constraints, or newly created rows
-				if (intConstraints.Contains(i-1) || i > model.Constraints.Count)
-				{
-                    double rowRHS = previousTable[i][previousTable[0].Count() - 1];
-                    remainders.Add(Math.Abs(rowRHS) - Math.Abs(Math.Truncate(rowRHS)));
-                }
-			}
+            // Figure out which variable we need to cut on
+            int cutVariableIndex = GetCutVariable(table, CanCut(model));
 
-            // Finding how far the RHS remainders are from 0,5
-			foreach (var remainder in remainders)
-			{
-                remainderRatios.Add(Math.Abs(0.5-remainder));
-			}
+            // Find the row that the cut variable is basic in
+            int basicRow = GetBasicRow(table, cutVariableIndex);
 
-            // Choosing a target row based on the remainder closest to 0.5 ,or left most x if
-            // there are similar ratios
-            List<double> sortedRatios = remainderRatios;
-            sortedRatios.Sort();
+            List<double> cutConstraint = GetCutConstraint(table, basicRow);
 
-            // If the first two ratios(when sorted) are the same, it means there are multiple RHS values
-            // equally close to 0,5
-            if (sortedRatios.Count > 1 && sortedRatios[0] == sortedRatios[1])
-			{
-                targetRow = FindLeftMostX(previousTable, remainderRatios, sortedRatios);
-			}
-			else
-			{
-                for (int i = 0; i < remainderRatios.Count; i++)
+            // For user friendliness, we'll show the old table in the results as well as the new table with the newly added constraint as opposed to
+            // just adding the new constraint to the old table (which would work, but it would be harder to see where constraints were added)
+            var newTable = ListCloner.CloneList(table);
+
+            // Add the new constraint to the new table
+            newTable.Add(cutConstraint);
+
+            // Add a column with 0s and 1 for the new slack variable
+            for (int i = 0; i < newTable.Count; i++)
+            {
+                if (i == newTable.Count - 1)
                 {
-                    if (remainderRatios[i] == sortedRatios[0])
+                    newTable[i].Insert(newTable[i].Count - 1, 1);
+                }
+                else
+                {
+                    newTable[i].Insert(newTable[i].Count - 1, 0);
+                }
+            }
+
+            // Add the new table to the model
+            model.Result.Add(newTable);
+        }
+
+        private List<double> GetCutConstraint(List<List<double>> table, int basicRow)
+        {
+            List<double> cutConstraint = new List<double>();
+
+            for (int i = 0; i < table[basicRow].Count; i++)
+            {
+                // We only care about non-integer values when cutting (integer values would stay on the left and be discarded when we create 
+                // our new constraint)
+                if (table[basicRow][i] == Math.Truncate(table[basicRow][i]))
+                {
+                    cutConstraint.Add(0);
+                }
+                else
+                {
+                    // Split the number into an integer (the nearest integer <= the number) and a fractional part (the difference between the numbers)
+                    double fractionalPart = Math.Abs(Math.Floor(table[basicRow][i]) - table[basicRow][i]);
+                    cutConstraint.Add(-1 * fractionalPart);
+                }
+            }
+
+            return cutConstraint;
+        }
+
+        private List<int> CanCut(Model model)
+        {
+            List<int> intBinVarIndexes = new List<int>();
+            List<int> indexesToDiscard = new List<int>();
+            var lastTable = model.Result[model.Result.Count - 1];
+
+            // Get the indexes of the int/bin variables
+            for (int i = 0; i < model.SignRestrictions.Count; i++)
+            {
+                if (model.SignRestrictions[i] == SignRestriction.Integer || model.SignRestrictions[i] == SignRestriction.Binary)
+                {
+                    intBinVarIndexes.Add(i);
+                }
+            }
+
+            // Check each int/bin variable to see if the sign restriction is violated
+            foreach (var intBinVar in intBinVarIndexes)
+            {
+                // First check if the variable is non-basic (which means it = 0 and int/bin restriction is satisfied)
+                if (!IsVariableBasic(intBinVar, lastTable))
+                {
+                    indexesToDiscard.Add(intBinVar);
+                }
+                // If it is basic, make sure the RHS is not already an integer
+                else
+                {
+                    double rhs = GetRhsOfVariable(intBinVar, lastTable);
+
+                    if (rhs - Math.Truncate(rhs) == 0)
                     {
-                        targetRow = intConstraints[i];
+                        indexesToDiscard.Add(intBinVar);
                     }
                 }
             }
 
-            // If the first ratio is 0.5, then it means remainder was 0. Thus
-            // all targetted rows are integers.
-			if (sortedRatios[0] == 0.5)
-			{
-                return 0;
-			}
+            intBinVarIndexes.RemoveAll(v => indexesToDiscard.Contains(v) == true);
 
-            return targetRow; // 0 is returned if no row is found
+            return intBinVarIndexes;
         }
 
-        private int FindLeftMostX(List<List<double>> previousTable, List<double> remainderRatios, List<double> sortedRatios)
-		{
-            
-			for (int i = 0; i < totalDicisionVariables; i++)//columns
-			{
-				for (int j = 1; j < previousTable.Count; j++)//rows
-				{
-                    if (previousTable[j][i] == 1 && remainderRatios[j-1] == sortedRatios[0])
-					{
-                        return j;
-					}
-				}
-            }
-            return 0;
-		}
-        
-        // Creating a new row based on the Target Row
-        private List<List<double>> AddNewRow(List<List<double>> previousTable, List<double> targetRow)
-		{
-            List<List<double>> newTable = new List<List<double>>();
-            for (int i = 0; i < previousTable.Count; i++)
+        private double GetRhsOfVariable(int intBinVar, List<List<double>> table)
+        {
+            if (!IsVariableBasic(intBinVar, table))
+                return 0;
+
+            double rhs = 0;
+
+            for (int i = 1; i < table.Count; i++)
             {
-                newTable.Add(new List<double>());
-
-                for (int j = 0; j < previousTable[i].Count; j++)
+                if (table[i][intBinVar] == 1)
                 {
-                    newTable[i].Add(previousTable[i][j]);
+                    rhs = table[i][table[i].Count - 1];
+                    break;
                 }
             }
 
-            List<double> newRow = new List<double>();
-            int newColumnLocation = targetRow.Count - 1;
+            return rhs;
+        }
 
-            // Getting remainders of the target constraint
-            for (int i = 0; i < targetRow.Count; i++)
-			{
-				if (i == newColumnLocation)
-				{
-                    // Adding new column for new row
-                    newRow.Add(1);
+        private bool IsVariableBasic(int intBinVar, List<List<double>> table)
+        {
+            bool isBasic = true;
+
+            for (int i = 0; i < table.Count; i++)
+            {
+                int numberOfOnes = 0;
+
+                if (table[i][intBinVar] == 1)
+                    numberOfOnes++;
+
+                if ((table[i][intBinVar] != 0 && table[i][intBinVar] != 1) || numberOfOnes > 1)
+                {
+                    isBasic = false;
+                    break;
                 }
-                double constraintVar = targetRow[i];
-                double roundedValue = Math.Floor(constraintVar);
-
-                // Moving lef-hand side values to the right
-                newRow.Add(Math.Abs(constraintVar - roundedValue) * -1);
             }
 
-            // Adding new column values to previous constraints
-            foreach (var row in newTable)
-			{
-                row.Insert(newColumnLocation, 0);
-			}
-            newTable.Add(newRow);
+            return isBasic;
+        }
 
-            return newTable;
-		}
+        private int GetCutVariable(List<List<double>> table, List<int> intBinVarIndexes)
+        {
+            if (intBinVarIndexes.Count == 1)
+                return intBinVarIndexes[0];
 
+            int branchVariableIndex = -1;
+            decimal smallestFractionalPart = 1;
 
-        /*
-         * DO TO:
-         * Test Partial-Integer Problems
-         * Eliminate table parameter needs via model replacement
-         */
+            foreach (var intBinVar in intBinVarIndexes)
+            {
+                var rhs = (Decimal)GetRhsOfVariable(intBinVar, table);
+                decimal fractionalPart = rhs - Math.Truncate(rhs);
+                if (Math.Abs(0.5m - fractionalPart) < smallestFractionalPart)
+                {
+                    smallestFractionalPart = Math.Abs(0.5m - fractionalPart);
+                    branchVariableIndex = intBinVar;
+                }
+            }
+
+            return branchVariableIndex;
+        }
+
+        private int GetBasicRow(List<List<double>> table, int variableIndex)
+        {
+            int basicRow = -1;
+
+            for (int i = 1; i < table.Count; i++)
+            {
+                if (table[i][variableIndex] == 1)
+                {
+                    basicRow = i;
+                    break;
+                }
+            }
+
+            return basicRow;
+        }
     }
 }
