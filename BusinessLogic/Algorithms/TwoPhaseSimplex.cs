@@ -10,51 +10,62 @@ namespace BusinessLogic.Algorithms
 {
     public class TwoPhaseSimplex : Algorithm
     {
+        private int numberOfArtificialVars = 0;
+
         public override void PutModelInCanonicalForm(Model model)
         {
-            // Our initial table
-            List<List<double>> initialTable = new List<List<double>>();
-
-            // Add the objective function coefficients to the initial table first (and take the decision variables across the = sign: make them negative)
-            initialTable.Add(new List<double>());
-
-            foreach (var decVar in model.ObjectiveFunction.DecisionVariables)
-            {
-                initialTable[0].Add(decVar.Coefficient * -1);
-            }
-
-            // We need to add a slack/excess & artificial variables so we add extra columns with 0s
-            // If we have any = constraints then we need to split those into 2 <= and >= constraints
+            // First make sure that we don't have any negative RHS in the constraints
             for (int i = 0; i < model.Constraints.Count; i++)
             {
-                initialTable[0].Add(0);
-                if (model.Constraints[i].InequalitySign == InequalitySign.EqualTo)
-                    initialTable[0].Add(0);
-            }
-
-            // Finally, add a 0 for the RHS of the objective function
-            initialTable[0].Add(0);
-
-            // Firstly, make rhs non negative
-            var nonNegativeConstraints = model.Constraints.Where(c => c.InequalitySign == InequalitySign.EqualTo).ToList();
-            if (nonNegativeConstraints?.Count() > 0)
-            {
-                for (int i = 0; i < nonNegativeConstraints.Count(); i++)
+                if (model.Constraints[i].RightHandSide < 0)
                 {
-                    model.Constraints[model.Constraints.FindIndex(c => c == nonNegativeConstraints[i])].InequalitySign = InequalitySign.LessThanOrEqualTo;
-                    var newConstraint = new Constraint();
-                    newConstraint.InequalitySign = InequalitySign.GreaterThanOrEqualTo;
-                    newConstraint.RightHandSide = nonNegativeConstraints[i].RightHandSide;
-
-                    foreach (var decVar in nonNegativeConstraints[i].DecisionVariables)
+                    for (int j = 0; j < model.Constraints[i].DecisionVariables.Count; j++)
                     {
-                        newConstraint.DecisionVariables.Add(new DecisionVariable() { Coefficient = decVar.Coefficient });
+                        model.Constraints[i].DecisionVariables[j].Coefficient *= -1;
                     }
 
-                    model.Constraints.Add(newConstraint);
+                    model.Constraints[i].RightHandSide *= -1;
+
+                    if (model.Constraints[i].InequalitySign == InequalitySign.LessThanOrEqualTo)
+                    {
+                        model.Constraints[i].InequalitySign = InequalitySign.GreaterThanOrEqualTo;
+                    }
+                    else if (model.Constraints[i].InequalitySign == InequalitySign.GreaterThanOrEqualTo)
+                    {
+                        model.Constraints[i].InequalitySign = InequalitySign.LessThanOrEqualTo;
+                    }
                 }
             }
 
+            // Our initial table
+            List<List<double>> tableZero = new List<List<double>>();
+
+            // Add the objective function coefficients to the initial table first (and take the decision variables across the = sign: make them negative)
+            tableZero.Add(new List<double>());
+
+            foreach (var decVar in model.ObjectiveFunction.DecisionVariables)
+            {
+                tableZero[0].Add(decVar.Coefficient * -1);
+            }
+
+            foreach (var constraint in model.Constraints)
+            {
+                if (constraint.InequalitySign == InequalitySign.LessThanOrEqualTo ||
+                    constraint.InequalitySign == InequalitySign.GreaterThanOrEqualTo)
+                {
+                    tableZero[0].Add(0);
+                }
+
+                if (constraint.InequalitySign == InequalitySign.EqualTo ||
+                    constraint.InequalitySign == InequalitySign.GreaterThanOrEqualTo)
+                {
+                    tableZero[0].Add(0);
+                }
+            }
+
+            tableZero[0].Add(0);
+
+            // Add the constraints
             for (int i = 0; i < model.Constraints.Count; i++)
             {
                 List<double> constraintValues = new List<double>();
@@ -62,87 +73,163 @@ namespace BusinessLogic.Algorithms
                 // Add the technical coefficients of the decision variables to the constraints
                 foreach (var decVar in model.Constraints[i].DecisionVariables)
                 {
-                    if (model.Constraints[i].InequalitySign == InequalitySign.LessThanOrEqualTo)
-                    {
-                        constraintValues.Add(decVar.Coefficient);
-                    }
-                    else
-                    {
-                        constraintValues.Add(decVar.Coefficient * -1);
-                    }
+                    constraintValues.Add(decVar.Coefficient);
                 }
 
-                // Add relevant 0s and 1s for our slack, excess and artificial variables
+                // Add the slack/excess variables
                 for (int j = 0; j < model.Constraints.Count; j++)
                 {
-                    if (j == i)
+                    if (model.Constraints[j].InequalitySign == InequalitySign.LessThanOrEqualTo)
                     {
-                        constraintValues.Add(1);
+                        if (j == i)
+                        {
+                            constraintValues.Add(1);
+                        }
+                        else
+                        {
+                            constraintValues.Add(0);
+                        }
                     }
-                    else
+                    else if (model.Constraints[j].InequalitySign == InequalitySign.GreaterThanOrEqualTo)
                     {
-                        constraintValues.Add(0);
+                        if (j == i)
+                        {
+                            constraintValues.Add(-1);
+                        }
+                        else
+                        {
+                            constraintValues.Add(0);
+                        }
                     }
                 }
 
                 // Add the RHS of our constraint
-                if (model.Constraints[i].InequalitySign == InequalitySign.LessThanOrEqualTo)
+                constraintValues.Add(model.Constraints[i].RightHandSide);
+
+                // Add artificial variables
+                for (int j = 0; j < model.Constraints.Count; j++)
                 {
-                    constraintValues.Add(model.Constraints[i].RightHandSide);
-                }
-                else
-                {
-                    constraintValues.Add(model.Constraints[i].RightHandSide * -1);
+                    if (model.Constraints[j].InequalitySign == InequalitySign.EqualTo ||
+                        model.Constraints[j].InequalitySign == InequalitySign.GreaterThanOrEqualTo)
+                    {
+                        if (j == i)
+                        {
+                            constraintValues.Insert(constraintValues.Count - 1, 1);
+                        }
+                        else
+                        {
+                            constraintValues.Insert(constraintValues.Count - 1, 0);
+                        }
+                    }
                 }
 
-                initialTable.Add(constraintValues);
+                tableZero.Add(constraintValues);
             }
 
-            model.Result.Add(initialTable);
+            // Add the w row which is equal to the sum of the artificial variables
+            numberOfArtificialVars = model.Constraints.Where(c => c.InequalitySign ==
+            InequalitySign.EqualTo || c.InequalitySign == InequalitySign.GreaterThanOrEqualTo).Count();
 
+            List<double> wRow = new List<double>();
+            for (int i = 0; i < tableZero[0].Count; i++)
+            {
+                wRow.Add(0);
+            }
+
+            for (int i = 1; i < tableZero.Count; i++)
+            {
+                if (model.Constraints[i - 1].InequalitySign == InequalitySign.EqualTo ||
+                    model.Constraints[i - 1].InequalitySign == InequalitySign.GreaterThanOrEqualTo)
+                {
+                    for (int j = 0; j < (tableZero[i].Count - numberOfArtificialVars - 1); j++)
+                    {
+                        wRow[j] += tableZero[i][j];
+                    }
+
+                    wRow[wRow.Count - 1] += tableZero[i][tableZero[i].Count - 1];
+                }
+            }
+
+            tableZero.Insert(0, wRow);
+            model.Result.Add(tableZero);
         }
 
-        private bool CanPivot(Model model)
+        public override void Solve(Model model)
         {
-            // If we have any negatives in the RHS then we can pivot (obviously if we also have a row to pivot on)
-            bool canPivot = false;
+            Iterate(model);
+            var lastTable = model.Result[model.Result.Count - 1];
 
-            var table = model.Result[model.Result.Count - 1];
-
-            for (int i = 1; i < table.Count; i++)
+            // Remove w row and artificial variables
+            if (lastTable[0][lastTable[0].Count - 1] > 0)
             {
-                if (table[i][table[i].Count - 1] < 0)
+                throw new InfeasibleException("The problem is infeasible");
+            }
+
+            // If all artificial variables are basic and w = 0, drop w row and artificial variables
+            bool allArtificialsNonBasic = true;
+            for (int i = lastTable[0].Count - (numberOfArtificialVars + 1); i < lastTable[0].Count - 1; i++)
+            {
+                if (IsVariableBasic(i, lastTable))
                 {
-                    canPivot = true;
+                    allArtificialsNonBasic = false;
                     break;
                 }
             }
 
-            return canPivot;
-        }
-
-        private void wElim(Model model, int wRow, int excessCols)
-        {
-            var previousTable = model.Result[model.Result.Count - 1];
-            var newTable = new List<List<double>>();
-
-            if (model.Constraints[wRow].RightHandSide > 0)
+            if (allArtificialsNonBasic)
             {
-                throw new InfeasibleException("There is no feasible solution.");
-            }
-            else
-            {
-                for (int i = wRow; i < previousTable.Count; wRow++)
+                // Remove w row
+                lastTable.RemoveAt(0);
+
+                // Remove all artificial variables
+                for (int i = 0; i < lastTable.Count; i++)
                 {
-                    newTable.Add(new List<double>());
-
-                    for (int j = 0; j < previousTable[i].Count; j++)
+                    for (int j = 0; j < numberOfArtificialVars; j++)
                     {
-                        newTable[i].Add(previousTable[i][j]);
+                        lastTable[i].RemoveAt(lastTable[i].Count - 2);
                     }
                 }
             }
-            model.Result.Add(newTable);
+
+            var primalSimplex = new PrimalSimplex();
+            primalSimplex.Solve(model);
+        }
+
+        private bool IsOptimal(Model model)
+        {
+            bool isOptimal = true;
+            var table = model.Result[model.Result.Count - 1];
+
+            for (int i = 0; i < table[0].Count - 1; i++)
+            {
+                if (table[0][i] > 0)
+                {
+                    isOptimal = false;
+                    break;
+                }
+            }
+
+            return isOptimal;
+        }
+
+        private void Iterate(Model model)
+        {
+            // Check if optimal - if not, iterate
+            if (IsOptimal(model))
+                return;
+
+            // Get the pivot column first
+            int pivotColumn = GetPivotColumn(model);
+            // Then get the pivot row
+            int pivotRow = GetPivotRow(model, pivotColumn);
+
+            if (pivotRow == -1)
+                throw new InfeasibleException("There is no suitable row to pivot on - the problem is infeasible");
+
+            Pivot(model, pivotRow, pivotColumn);
+
+            // Recursively iterate until the model is optimal (or until we cannot iterate anymore - infeasible)
+            Iterate(model);
         }
 
         private void Pivot(Model model, int pivotRow, int pivotColumn)
@@ -189,31 +276,14 @@ namespace BusinessLogic.Algorithms
         {
             int colIndex = -1;
             var table = model.Result[model.Result.Count - 1];
+            double mostPositive = 0;
 
-            if (model.ProblemType == ProblemType.Maximization)
+            for (int i = 0; i < table[0].Count - 1; i++)
             {
-                double mostNegative = 0;
-
-                for (int i = 0; i < table[0].Count - 1; i++)
+                if (table[0][i] > 0 && table[0][i] > mostPositive)
                 {
-                    if (table[0][i] < 0 && table[0][i] < mostNegative)
-                    {
-                        mostNegative = table[0][i];
-                        colIndex = i;
-                    }
-                }
-            }
-            else
-            {
-                double mostPositive = 0;
-
-                for (int i = 0; i < table[0].Count - 1; i++)
-                {
-                    if (table[0][i] > 0 && table[0][i] > mostPositive)
-                    {
-                        mostPositive = table[0][i];
-                        colIndex = i;
-                    }
+                    mostPositive = table[0][i];
+                    colIndex = i;
                 }
             }
 
@@ -242,62 +312,25 @@ namespace BusinessLogic.Algorithms
             return rowIndex;
         }
 
-        private bool IsOptimal(Model model)
+        private bool IsVariableBasic(int index, List<List<double>> table)
         {
-            bool isOptimal = true;
-            var table = model.Result[model.Result.Count - 1];
+            bool isBasic = true;
 
-            if (model.ProblemType == ProblemType.Maximization)
+            for (int i = 0; i < table.Count; i++)
             {
-                for (int i = 0; i < table[0].Count - 1; i++)
+                int numberOfOnes = 0;
+
+                if (table[i][index] == 1)
+                    numberOfOnes++;
+
+                if ((table[i][index] != 0 && table[i][index] != 1) || numberOfOnes > 1)
                 {
-                    if (table[0][i] < 0)
-                    {
-                        isOptimal = false;
-                        break;
-                    }
-                }
-            }
-            else
-            {
-                for (int i = 0; i < table[0].Count - 1; i++)
-                {
-                    if (table[0][i] > 0)
-                    {
-                        isOptimal = false;
-                        break;
-                    }
+                    isBasic = false;
+                    break;
                 }
             }
 
-            return isOptimal;
-        }
-
-        private void Iterate(Model model)
-        {
-
-            // Get the pivot column first
-            int pivotColumn = GetPivotColumn(model);
-            // Then get the pivot row
-            int pivotRow = GetPivotRow(model, pivotColumn);
-            // Check if optimal - if not, iterate
-            if (IsOptimal(model))
-                return;
-
-            if (pivotRow == -1)
-                throw new InfeasibleException("There is no suitable row to pivot on - the problem is infeasible");
-
-            Pivot(model, pivotRow, pivotColumn);
-
-            // Recursively iterate until the model is optimal (or until we cannot iterate anymore - infeasible)
-            Iterate(model);
-        }
-
-        public override void Solve(Model model)
-        {
-            Iterate(model);
-            var primalSimplex = new PrimalSimplex();
-            primalSimplex.Solve(model);
+            return isBasic;
         }
     }
 }
