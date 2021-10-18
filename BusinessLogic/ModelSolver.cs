@@ -19,9 +19,6 @@ namespace BusinessLogic
             // Solve the model using the chosen algorithm
             algorithm.Solve(model);
 
-            // Write the results to a text file
-            //ModelWriter.WriteResultsToFile(model);
-
             Console.Clear();
             Console.WriteLine("Here is the solution:");
             Console.WriteLine("=========================================================================================================");

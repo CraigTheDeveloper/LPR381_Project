@@ -42,7 +42,6 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="ModelReader.cs" />
-    <Compile Include="ModelWriter.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
@@ -52,6 +51,9 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
+    <Content Include="acme.txt">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
     <Content Include="branch.txt">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>

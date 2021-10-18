@@ -11,14 +11,14 @@ namespace BusinessLogic.Algorithms
     public class BranchAndBoundSimplex : Algorithm
     {
         private Model model;
-        private BinaryTree results = new BinaryTree();
+        public BinaryTree Results { get; set; } = new BinaryTree();
         private DualSimplex dualSimplex = new DualSimplex();
-        public List<List<List<double>>> CandidateSolutions = new List<List<List<double>>>();
+        private List<List<List<double>>> candidateSolutions = new List<List<List<double>>>();
 
         public override void PutModelInCanonicalForm(Model model)
         {
             dualSimplex.PutModelInCanonicalForm(model);
-            results.Add(model.Result);
+            Results.Add(model.Result);
         }
 
         public override void Solve(Model model)
@@ -26,9 +26,9 @@ namespace BusinessLogic.Algorithms
             this.model = model;
 
             int level = 1;
-            while (level <= results.GetHeight(results.Root))
+            while (level <= Results.GetHeight(Results.Root))
             {
-                SolveCurrentLevel(results.Root, level);
+                SolveCurrentLevel(Results.Root, level);
                 level++;
             }
         }
@@ -57,6 +57,34 @@ namespace BusinessLogic.Algorithms
             }
         }
 
+        public List<List<double>> GetBestCandidate()
+        {
+            double bestRHS = candidateSolutions[0][0][candidateSolutions[0][0].Count - 1];
+            List<List<double>> bestSolution = candidateSolutions[0];
+
+            for (int i = 1; i < candidateSolutions.Count; i++)
+            {
+                if (model.ProblemType == ProblemType.Maximization)
+                {
+                    if (candidateSolutions[i][0][candidateSolutions[i][0].Count - 1] > bestRHS)
+                    {
+                        bestRHS = candidateSolutions[i][0][candidateSolutions[i][0].Count - 1];
+                        bestSolution = candidateSolutions[i];
+                    }
+                }
+                else
+                {
+                    if (candidateSolutions[i][0][candidateSolutions[i][0].Count - 1] < bestRHS)
+                    {
+                        bestRHS = candidateSolutions[i][0][candidateSolutions[i][0].Count - 1];
+                        bestSolution = candidateSolutions[i];
+                    }
+                }
+            }
+
+            return bestSolution;
+        }
+
         private void Solve(BinaryTreeNode root)
         {
             var model = new Model() { ProblemType = this.model.ProblemType, Result = root.Data };
@@ -67,7 +95,7 @@ namespace BusinessLogic.Algorithms
         {
             if (CanBranch(root).Count == 0)
             {
-                CandidateSolutions.Add(root.Data[root.Data.Count - 1]);
+                candidateSolutions.Add(root.Data[root.Data.Count - 1]);
             }     
             else
             {
@@ -142,8 +170,8 @@ namespace BusinessLogic.Algorithms
                 subProblemTwoTable[subProblemTwoTable.Count - 1][i] += subProblemTwoTable[subProblemBasicRow][i];
             }
 
-            results.Add(new List<List<List<double>>>() { subProblemOneTable }, root.Data);
-            results.Add(new List<List<List<double>>>() { subProblemTwoTable }, root.Data);
+            Results.Add(new List<List<List<double>>>() { subProblemOneTable }, root.Data);
+            Results.Add(new List<List<List<double>>>() { subProblemTwoTable }, root.Data);
         }
 
         private int GetBasicRow(List<List<double>> table, int branchVariableIndex)
