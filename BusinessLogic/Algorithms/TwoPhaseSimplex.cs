@@ -190,6 +190,33 @@ namespace BusinessLogic.Algorithms
                     }
                 }
             }
+            else
+            {
+                for (int i = 0; i < model.ObjectiveFunction.DecisionVariables.Count; i++)
+                {
+                    if (lastTable[0][i] < 0)
+                    {
+                        for (int j = 0; j < lastTable.Count; j++)
+                        {
+                            lastTable[j].RemoveAt(i);
+                        }
+                    }
+                }
+
+                for (int i = lastTable[0].Count - (numberOfArtificialVars + 1); i < lastTable[0].Count - 1; i++)
+                {
+                    if (!IsVariableBasic(i, lastTable))
+                    {
+                        for (int j = 0; j < lastTable.Count; j++)
+                        {
+                            lastTable[j].RemoveAt(i);
+                        }
+                    }
+                }
+
+                // Remove w row
+                lastTable.RemoveAt(0);
+            }
 
             var primalSimplex = new PrimalSimplex();
             primalSimplex.Solve(model);
